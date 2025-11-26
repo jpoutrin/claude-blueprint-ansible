@@ -1,0 +1,290 @@
+# Ansible Role Template
+
+This template provides the structure for creating new Ansible roles.
+
+## Directory Structure
+
+```
+{{ role_name }}/
+├── defaults/
+│   └── main.yml
+├── files/
+├── handlers/
+│   └── main.yml
+├── meta/
+│   └── main.yml
+├── tasks/
+│   └── main.yml
+├── templates/
+├── tests/
+│   ├── inventory
+│   └── test.yml
+├── vars/
+│   └── main.yml
+└── README.md
+```
+
+## File Templates
+
+### defaults/main.yml
+```yaml
+---
+# defaults file for {{ role_name }}
+
+# Example variables with defaults
+{{ role_name }}_enabled: true
+{{ role_name }}_service_name: "{{ role_name }}"
+{{ role_name }}_port: 8080
+{{ role_name }}_user: "{{ role_name }}"
+{{ role_name }}_group: "{{ role_name }}"
+{{ role_name }}_home: "/opt/{{ role_name }}"
+{{ role_name }}_config_dir: "/etc/{{ role_name }}"
+{{ role_name }}_log_dir: "/var/log/{{ role_name }}"
+```
+
+### vars/main.yml
+```yaml
+---
+# vars file for {{ role_name }}
+
+# Internal variables (not meant to be overridden)
+__{{ role_name }}_packages:
+  default:
+    - package1
+    - package2
+  RedHat:
+    - package1-rhel
+    - package2-rhel
+  Debian:
+    - package1-debian
+    - package2-debian
+
+{{ role_name }}_packages: "{{ __{{ role_name }}_packages[ansible_os_family] | default(__{{ role_name }}_packages['default']) }}"
+```
+
+### tasks/main.yml
+```yaml
+---
+# tasks file for {{ role_name }}
+
+- name: Include OS-specific variables
+  include_vars: "{{ item }}"
+  with_first_found:
+    - "{{ ansible_distribution }}-{{ ansible_distribution_major_version }}.yml"
+    - "{{ ansible_distribution }}.yml"
+    - "{{ ansible_os_family }}.yml"
+    - "default.yml"
+  tags:
+    - {{ role_name }}
+    - {{ role_name }}_config
+
+- name: Install {{ role_name }} packages
+  ansible.builtin.package:
+    name: "{{ {{ role_name }}_packages }}"
+    state: present
+  tags:
+    - {{ role_name }}
+    - {{ role_name }}_install
+
+- name: Create {{ role_name }} user
+  ansible.builtin.user:
+    name: "{{ {{ role_name }}_user }}"
+    group: "{{ {{ role_name }}_group }}"
+    home: "{{ {{ role_name }}_home }}"
+    shell: /bin/bash
+    system: true
+    create_home: true
+  tags:
+    - {{ role_name }}
+    - {{ role_name }}_user
+
+- name: Create {{ role_name }} directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ {{ role_name }}_user }}"
+    group: "{{ {{ role_name }}_group }}"
+    mode: '0755'
+  loop:
+    - "{{ {{ role_name }}_config_dir }}"
+    - "{{ {{ role_name }}_log_dir }}"
+    - "{{ {{ role_name }}_home }}"
+  tags:
+    - {{ role_name }}
+    - {{ role_name }}_dirs
+
+- name: Configure {{ role_name }}
+  ansible.builtin.template:
+    src: {{ role_name }}.conf.j2
+    dest: "{{ {{ role_name }}_config_dir }}/{{ role_name }}.conf"
+    owner: "{{ {{ role_name }}_user }}"
+    group: "{{ {{ role_name }}_group }}"
+    mode: '0644'
+    backup: true
+  notify: restart {{ role_name }}
+  tags:
+    - {{ role_name }}
+    - {{ role_name }}_config
+
+- name: Start and enable {{ role_name }} service
+  ansible.builtin.systemd:
+    name: "{{ {{ role_name }}_service_name }}"
+    state: started
+    enabled: true
+    daemon_reload: true
+  when: {{ role_name }}_enabled | bool
+  tags:
+    - {{ role_name }}
+    - {{ role_name }}_service
+```
+
+### handlers/main.yml
+```yaml
+---
+# handlers file for {{ role_name }}
+
+- name: restart {{ role_name }}
+  ansible.builtin.systemd:
+    name: "{{ {{ role_name }}_service_name }}"
+    state: restarted
+    daemon_reload: true
+  when: {{ role_name }}_enabled | bool
+
+- name: reload {{ role_name }}
+  ansible.builtin.systemd:
+    name: "{{ {{ role_name }}_service_name }}"
+    state: reloaded
+  when: {{ role_name }}_enabled | bool
+
+- name: stop {{ role_name }}
+  ansible.builtin.systemd:
+    name: "{{ {{ role_name }}_service_name }}"
+    state: stopped
+  when: not {{ role_name }}_enabled | bool
+```
+
+### meta/main.yml
+```yaml
+---
+galaxy_info:
+  author: {{ author_name }}
+  description: {{ role_description }}
+  company: {{ company_name | default('') }}
+  license: {{ license | default('MIT') }}
+  min_ansible_version: "2.15"
+  
+  platforms:
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
+    - name: EL
+      versions:
+        - "8"
+        - "9"
+  
+  galaxy_tags:
+    - {{ primary_tag }}
+    # Add more tags as needed
+
+dependencies: []
+  # List role dependencies here
+  # - role: common
+  #   vars:
+  #     some_var: value
+```
+
+### README.md
+```markdown
+# Ansible Role: {{ role_name }}
+
+{{ role_description }}
+
+## Requirements
+
+- Ansible >= 2.15
+- Supported platforms:
+  - Ubuntu 20.04, 22.04
+  - Debian 11, 12
+  - RHEL/CentOS/Rocky/Alma 8, 9
+
+## Role Variables
+
+Available variables are listed below, along with default values (see `defaults/main.yml`):
+
+```yaml
+{{ role_name }}_enabled: true
+{{ role_name }}_port: 8080
+{{ role_name }}_user: "{{ role_name }}"
+```
+
+## Dependencies
+
+None.
+
+## Example Playbook
+
+```yaml
+- hosts: servers
+  become: true
+  roles:
+    - role: {{ role_name }}
+      vars:
+        {{ role_name }}_port: 9090
+```
+
+## Testing
+
+This role can be tested using Molecule:
+
+```bash
+molecule test
+```
+
+## License
+
+{{ license | default('MIT') }}
+
+## Author Information
+
+{{ author_name }}
+```
+
+### tests/inventory
+```ini
+localhost ansible_connection=local
+```
+
+### tests/test.yml
+```yaml
+---
+- hosts: localhost
+  remote_user: root
+  roles:
+    - {{ role_name }}
+```
+
+## Molecule Configuration (molecule/default/molecule.yml)
+```yaml
+---
+dependency:
+  name: galaxy
+driver:
+  name: docker
+platforms:
+  - name: instance
+    image: geerlingguy/docker-ubuntu2204-ansible:latest
+    pre_build_image: true
+provisioner:
+  name: ansible
+  inventory:
+    host_vars:
+      instance:
+        {{ role_name }}_enabled: true
+verifier:
+  name: ansible
+```

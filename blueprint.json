@@ -1,0 +1,6 @@
+{
+  "name": "ansible",
+  "description": "Ansible automation blueprints for Claude",
+  "version": "1.0.0",
+  "author": "Jeremie Poutrin"
+}
